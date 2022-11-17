@@ -1,143 +1,159 @@
 #include "shell.h"
 
 /**
- * get_history_file - gets the history file
- * @info: parameter struct
+ * add_node - adds a node to the start of the list
+ * @head: address of pointer to head node
+ * @str: str field of node
+ * @num: node index used by history
  *
- * Return: allocated string containg history file
+ * Return: size of list
  */
-
-char *get_history_file(info_t *info)
+list_t *add_node(list_t **head, const char *str, int num)
 {
-	char *buf, *dir;
+	list_t *new_head;
 
-	dir = _getenv(info, "HOME=");
-	if (!dir)
+	if (!head)
 		return (NULL);
-	buf = malloc(sizeof(char) * (_strlen(dir) + _strlen(HIST_FILE) + 2));
-	if (!buf)
+	new_head = malloc(sizeof(list_t));
+	if (!new_head)
 		return (NULL);
-	buf[0] = 0;
-	_strcpy(buf, dir);
-	_strcat(buf, "/");
-	_strcat(buf, HIST_FILE);
-	return (buf);
-}
-
-/**
- * write_history - creates a file, or appends to an existing file
- * @info: the parameter struct
- *
- * Return: 1 on success, else -1
- */
-int write_history(info_t *info)
-{
-	ssize_t fd;
-	char *filename = get_history_file(info);
-	list_t *node = NULL;
-
-	if (!filename)
-		return (-1);
-
-	fd = open(filename, O_CREAT | O_TRUNC | O_RDWR, 0644);
-	free(filename);
-	if (fd == -1)
-		return (-1);
-	for (node = info->history; node; node = node->next)
+	_memset((void *)new_head, 0, sizeof(list_t));
+	new_head->num = num;
+	if (str)
 	{
-		_putsfd(node->str, fd);
-		_putfd('\n', fd);
-	}
-	_putfd(BUF_FLUSH, fd);
-	close(fd);
-	return (1);
-}
-
-/**
- * read_history - reads history from file
- * @info: the parameter struct
- *
- * Return: histcount on success, 0 otherwise
- */
-int read_history(info_t *info)
-{
-	int i, last = 0, linecount = 0;
-	ssize_t fd, rdlen, fsize = 0;
-	struct stat st;
-	char *buf = NULL, *filename = get_history_file(info);
-
-	if (!filename)
-		return (0);
-
-	fd = open(filename, O_RDONLY);
-	free(filename);
-	if (fd == -1)
-		return (0);
-	if (!fstat(fd, &st))
-		fsize = st.st_size;
-	if (fsize < 2)
-		return (0);
-	buf = malloc(sizeof(char) * (fsize + 1));
-	if (!buf)
-		return (0);
-	rdlen = read(fd, buf, fsize);
-	buf[fsize] = 0;
-	if (rdlen <= 0)
-		return (free(buf), 0);
-	close(fd);
-	for (i = 0; i < fsize; i++)
-		if (buf[i] == '\n')
+		new_head->str = _strdup(str);
+		if (!new_head->str)
 		{
-			buf[i] = 0;
-			build_history_list(info, buf + last, linecount++);
-			last = i + 1;
+			free(new_head);
+			return (NULL);
 		}
-	if (last != i)
-		build_history_list(info, buf + last, linecount++);
-	free(buf);
-	info->histcount = linecount;
-	while (info->histcount-- >= HIST_MAX)
-		delete_node_at_index(&(info->history), 0);
-	renumber_history(info);
-	return (info->histcount);
+	}
+	new_head->next = *head;
+	*head = new_head;
+	return (new_head);
 }
 
 /**
- * build_history_list - adds entry to a history linked list
- * @info: Structure containing potential arguments. Used to maintain
- * @buf: buffer
- * @linecount: the history linecount, histcount
+ * add_node_end - adds a node to the end of the list
+ * @head: address of pointer to head node
+ * @str: str field of node
+ * @num: node index used by history
  *
- * Return: Always 0
+ * Return: size of list
  */
-int build_history_list(info_t *info, char *buf, int linecount)
+list_t *add_node_end(list_t **head, const char *str, int num)
 {
-	list_t *node = NULL;
+	list_t *new_node, *node;
 
-	if (info->history)
-		node = info->history;
-	add_node_end(&node, buf, linecount);
+	if (!head)
+		return (NULL);
 
-	if (!info->history)
-		info->history = node;
+	node = *head;
+	new_node = malloc(sizeof(list_t));
+	if (!new_node)
+		return (NULL);
+	_memset((void *)new_node, 0, sizeof(list_t));
+	new_node->num = num;
+	if (str)
+	{
+		new_node->str = _strdup(str);
+		if (!new_node->str)
+		{
+			free(new_node);
+			return (NULL);
+		}
+	}
+	if (node)
+	{
+		while (node->next)
+			node = node->next;
+		node->next = new_node;
+	}
+	else
+		*head = new_node;
+	return (new_node);
+}
+
+/**
+ * print_list_str - prints only the str element of a list_t linked list
+ * @h: pointer to first node
+ *
+ * Return: size of list
+ */
+size_t print_list_str(const list_t *h)
+{
+	size_t i = 0;
+
+	while (h)
+	{
+		_puts(h->str ? h->str : "(nil)");
+		_puts("\n");
+		h = h->next;
+		i++;
+	}
+	return (i);
+}
+
+/**
+ * delete_node_at_index - deletes node at given index
+ * @head: address of pointer to first node
+ * @index: index of node to delete
+ *
+ * Return: 1 on success, 0 on failure
+ */
+int delete_node_at_index(list_t **head, unsigned int index)
+{
+	list_t *node, *prev_node;
+	unsigned int i = 0;
+
+	if (!head || !*head)
+		return (0);
+
+	if (!index)
+	{
+		node = *head;
+		*head = (*head)->next;
+		free(node->str);
+		free(node);
+		return (1);
+	}
+	node = *head;
+	while (node)
+	{
+		if (i == index)
+		{
+			prev_node->next = node->next;
+			free(node->str);
+			free(node);
+			return (1);
+		}
+		i++;
+		prev_node = node;
+		node = node->next;
+	}
 	return (0);
 }
 
 /**
- * renumber_history - renumbers the history linked list after changes
- * @info: Structure containing potential arguments. Used to maintain
+ * free_list - frees all nodes of a list
+ * @head_ptr: address of pointer to head node
  *
- * Return: the new histcount
+ * Return: void
  */
-int renumber_history(info_t *info)
+void free_list(list_t **head_ptr)
 {
-	list_t *node = info->history;
-	int i = 0;
+	list_t *node, *next_node, *head;
 
+	if (!head_ptr || !*head_ptr)
+		return;
+	head = *head_ptr;
+	node = head;
 	while (node)
 	{
-		node->num = i++;
-		node = node->next;
+		next_node = node->next;
+		free(node->str);
+		free(node);
+		node = next_node;
 	}
-	return (info->histcount = i);
+	*head_ptr = NULL;
 }
